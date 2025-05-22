@@ -1,5 +1,11 @@
 package main
 
+import (
+	"fmt"
+	"go-env-cli/cmd"
+)
+
 func main() {
-	println("Hello, World!")
+	fmt.Println("🌿 go-env-cli - Environment Variable Manager")
+	cmd.Execute()
 }
