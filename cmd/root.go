@@ -3,14 +3,12 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strconv"
 
 	"go-env-cli/config"
 	"go-env-cli/internal/app/handlers"
 	"go-env-cli/internal/app/models"
 	"go-env-cli/internal/pkg/db"
 
-	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 )
 
@@ -35,18 +33,7 @@ var rootCmd = &cobra.Command{
 	Long: `go-env-cli is a command-line tool that helps you manage environment variables
 across multiple projects and environments. It stores variables in a PostgreSQL database
 and provides commands for importing/exporting .env files, setting/getting variables,
-and more.`,
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		// Load .env file if specified
-		if envFile != "" {
-			err := godotenv.Load(envFile)
-			if err != nil {
-				fmt.Printf("Error loading .env file: %v\n", err)
-				os.Exit(1)
-			}
-		}
-	},
-}
+and more.`}
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once.
@@ -82,33 +69,6 @@ func initHandler() (*handlers.EnvHandler, error) {
 	cfg, err := config.LoadConfig(configFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %v", err)
-	}
-
-	// If env file was specified, override with its values
-	if envFile != "" {
-		env, err := godotenv.Read(envFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read .env file: %v", err)
-		}
-
-		if host, ok := env["DB_HOST"]; ok {
-			cfg.Database.Host = host
-		}
-		if port, ok := env["DB_PORT"]; ok {
-			portNum, err := strconv.Atoi(port)
-			if err == nil {
-				cfg.Database.Port = portNum
-			}
-		}
-		if user, ok := env["DB_USER"]; ok {
-			cfg.Database.User = user
-		}
-		if password, ok := env["DB_PASSWORD"]; ok {
-			cfg.Database.Password = password
-		}
-		if dbName, ok := env["DB_NAME"]; ok {
-			cfg.Database.DBName = dbName
-		}
 	}
 
 	// Connect to database

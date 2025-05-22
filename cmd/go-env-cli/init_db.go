@@ -15,7 +15,7 @@ import (
 func main() {
 	// Load configuration
 	fmt.Println("Loading configuration...")
-	cfg, err := config.LoadConfig(".env")
+	cfg, err := config.LoadConfig(".go-env-cli.yaml")
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}

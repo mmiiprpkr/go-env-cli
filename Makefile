@@ -45,7 +45,7 @@ init-db:
 # Install the binary to the system
 install: build
 	@echo "Installing $(APP_NAME) to /usr/local/bin..."
-	@cp $(BUILD_DIR)/$(APP_NAME) /usr/local/bin/
+	@cp $(BUILD_DIR)/$(APP_NAME) /usr/local/bin/ && rm -rf $(BUILD_DIR)
 
 # Help command
 help:
