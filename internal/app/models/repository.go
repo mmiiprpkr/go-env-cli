@@ -20,6 +20,22 @@ func NewRepository(db *sqlx.DB) *Repository {
 
 // CreateProject creates a new project
 func (r *Repository) CreateProject(name, description string) (*Project, error) {
+	// First check if an active project with the same name already exists
+	var count int
+	checkQuery := `
+		SELECT COUNT(*)
+		FROM projects
+		WHERE name = $1 AND deleted_at IS NULL
+	`
+	err := r.db.Get(&count, checkQuery, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check existing project: %w", err)
+	}
+
+	if count > 0 {
+		return nil, fmt.Errorf("a project with name '%s' already exists", name)
+	}
+
 	project := &Project{
 		ID:          uuid.New(),
 		Name:        name,
@@ -34,7 +50,7 @@ func (r *Repository) CreateProject(name, description string) (*Project, error) {
 		RETURNING id, name, description, created_at, updated_at
 	`
 
-	err := r.db.QueryRowx(query,
+	err = r.db.QueryRowx(query,
 		project.ID,
 		project.Name,
 		project.Description,
@@ -116,6 +132,17 @@ func (r *Repository) SoftDeleteProject(id uuid.UUID) error {
 		return fmt.Errorf("failed to soft delete project: %w", err)
 	}
 
+	deleteEnvQuery := `
+		UPDATE env_variables
+		SET deleted_at = $1, updated_at = $1
+		WHERE project_id = $2 AND deleted_at IS NULL
+	`
+
+	_, err = r.db.Exec(deleteEnvQuery, now, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete environment variables: %w", err)
+	}
+
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("failed to get rows affected: %w", err)
@@ -164,6 +191,22 @@ func (r *Repository) GetAllEnvironments() ([]Environment, error) {
 
 // CreateEnvironment creates a new environment
 func (r *Repository) CreateEnvironment(name, description string) (*Environment, error) {
+	// First check if an environment with the same name already exists
+	var count int
+	checkQuery := `
+		SELECT COUNT(*)
+		FROM environments
+		WHERE name = $1
+	`
+	err := r.db.Get(&count, checkQuery, name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check existing environment: %w", err)
+	}
+
+	if count > 0 {
+		return nil, fmt.Errorf("an environment with name '%s' already exists", name)
+	}
+
 	env := &Environment{
 		ID:          uuid.New(),
 		Name:        name,
@@ -175,11 +218,10 @@ func (r *Repository) CreateEnvironment(name, description string) (*Environment, 
 	query := `
 		INSERT INTO environments (id, name, description, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (name) DO NOTHING
 		RETURNING id, name, description, created_at, updated_at
 	`
 
-	err := r.db.QueryRowx(query,
+	err = r.db.QueryRowx(query,
 		env.ID,
 		env.Name,
 		env.Description,
@@ -197,15 +239,54 @@ func (r *Repository) CreateEnvironment(name, description string) (*Environment, 
 // SetEnvVariable sets (creates or updates) an environment variable
 func (r *Repository) SetEnvVariable(projectID, environmentID uuid.UUID, key, value string) (*EnvVariable, error) {
 	now := time.Now()
-	query := `
-		INSERT INTO env_variables (id, project_id, environment_id, key, value, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (project_id, environment_id, key) DO UPDATE
-		SET value = $5, updated_at = $7
-		RETURNING id, project_id, environment_id, key, value, created_at, updated_at, deleted_at
+
+	// Check if the variable already exists but is not deleted
+	existingVar := &EnvVariable{}
+	checkQuery := `
+		SELECT id, project_id, environment_id, key, value, created_at, updated_at, deleted_at
+		FROM env_variables
+		WHERE project_id = $1 AND environment_id = $2 AND key = $3
 	`
 
-	variable := &EnvVariable{
+	err := r.db.Get(existingVar, checkQuery, projectID, environmentID, key)
+
+	if err == nil {
+		// Variable exists, check if it's deleted
+		if existingVar.DeletedAt == nil {
+			// Update existing active variable
+			updateQuery := `
+				UPDATE env_variables
+				SET value = $1, updated_at = $2
+				WHERE id = $3
+				RETURNING id, project_id, environment_id, key, value, created_at, updated_at, deleted_at
+			`
+
+			err := r.db.QueryRowx(updateQuery, value, now, existingVar.ID).StructScan(existingVar)
+			if err != nil {
+				return nil, fmt.Errorf("failed to update environment variable: %w", err)
+			}
+
+			return existingVar, nil
+		}
+
+		// Variable exists but is deleted, reactivate it
+		reactivateQuery := `
+			UPDATE env_variables
+			SET value = $1, updated_at = $2, deleted_at = NULL
+			WHERE id = $3
+			RETURNING id, project_id, environment_id, key, value, created_at, updated_at, deleted_at
+		`
+
+		err := r.db.QueryRowx(reactivateQuery, value, now, existingVar.ID).StructScan(existingVar)
+		if err != nil {
+			return nil, fmt.Errorf("failed to reactivate environment variable: %w", err)
+		}
+
+		return existingVar, nil
+	}
+
+	// Variable doesn't exist, create new one
+	newVar := &EnvVariable{
 		ID:            uuid.New(),
 		ProjectID:     projectID,
 		EnvironmentID: environmentID,
@@ -215,21 +296,27 @@ func (r *Repository) SetEnvVariable(projectID, environmentID uuid.UUID, key, val
 		UpdatedAt:     now,
 	}
 
-	err := r.db.QueryRowx(query,
-		variable.ID,
-		variable.ProjectID,
-		variable.EnvironmentID,
-		variable.Key,
-		variable.Value,
-		variable.CreatedAt,
-		variable.UpdatedAt,
-	).StructScan(variable)
+	insertQuery := `
+		INSERT INTO env_variables (id, project_id, environment_id, key, value, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id, project_id, environment_id, key, value, created_at, updated_at, deleted_at
+	`
+
+	err = r.db.QueryRowx(insertQuery,
+		newVar.ID,
+		newVar.ProjectID,
+		newVar.EnvironmentID,
+		newVar.Key,
+		newVar.Value,
+		newVar.CreatedAt,
+		newVar.UpdatedAt,
+	).StructScan(newVar)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to set environment variable: %w", err)
+		return nil, fmt.Errorf("failed to insert environment variable: %w", err)
 	}
 
-	return variable, nil
+	return newVar, nil
 }
 
 // GetEnvVariable gets an environment variable by key

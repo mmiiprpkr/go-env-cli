@@ -32,13 +32,13 @@ test-setup: docker-up
 
 docker-up:
 	@echo "Starting PostgreSQL in Docker..."
-	@docker-compose up -d postgres
+	@docker-compose up -d
 
 docker-down:
 	@echo "Stopping PostgreSQL in Docker..."
 	@docker-compose down
 
-init-db: docker-up
+init-db:
 	@echo "Initializing database..."
 	@go run cmd/go-env-cli/init_db.go
 

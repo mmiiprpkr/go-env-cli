@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
@@ -28,57 +29,49 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	// Set defaults
 	viper.SetDefault("database.host", "localhost")
-	viper.SetDefault("database.port", 5434)
+	viper.SetDefault("database.port", 5432)
 	viper.SetDefault("database.user", "postgres")
 	viper.SetDefault("database.password", "postgres")
 	viper.SetDefault("database.dbname", "go-env-cli")
 	viper.SetDefault("database.sslmode", "disable")
 
-	// Set config file path if provided
-	if configPath != "" {
+	// If .env file is specified, load it
+	if configPath != "" && strings.HasSuffix(configPath, ".env") {
+		if err := godotenv.Load(configPath); err != nil {
+			return nil, fmt.Errorf("failed to load .env file: %w", err)
+		}
+	}
+
+	// Set config file if not .env
+	if configPath != "" && !strings.HasSuffix(configPath, ".env") {
 		viper.SetConfigFile(configPath)
 	} else {
-		// Search config in home directory with name ".go-env-cli" (without extension)
 		viper.AddConfigPath(".")
 		viper.AddConfigPath("$HOME")
 		viper.SetConfigName(".go-env-cli")
 	}
 
-	// Read the config file
+	// Read config file if exists
 	if err := viper.ReadInConfig(); err != nil {
-		// It's ok if config file doesn't exist
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
 			return nil, fmt.Errorf("error reading config file: %w", err)
 		}
 	}
 
-	// Set up environment variable prefixes
+	// Setup env override
 	viper.SetEnvPrefix("GO_ENV_CLI")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 
-	// Unmarshal config
+	// Optional explicit binding
+	_ = viper.BindEnv("database.host", "DB_HOST")
+	_ = viper.BindEnv("database.port", "DB_PORT")
+	_ = viper.BindEnv("database.user", "DB_USER")
+	_ = viper.BindEnv("database.password", "DB_PASSWORD")
+	_ = viper.BindEnv("database.dbname", "DB_NAME")
+
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, fmt.Errorf("error unmarshalling config: %w", err)
-	}
-
-	// Override with environment variables from provided .env file, if any
-	if configPath != "" && strings.HasSuffix(configPath, ".env") {
-		if err := viper.BindEnv("database.host", "DB_HOST"); err != nil {
-			return nil, fmt.Errorf("error binding env var DB_HOST: %w", err)
-		}
-		if err := viper.BindEnv("database.port", "DB_PORT"); err != nil {
-			return nil, fmt.Errorf("error binding env var DB_PORT: %w", err)
-		}
-		if err := viper.BindEnv("database.user", "DB_USER"); err != nil {
-			return nil, fmt.Errorf("error binding env var DB_USER: %w", err)
-		}
-		if err := viper.BindEnv("database.password", "DB_PASSWORD"); err != nil {
-			return nil, fmt.Errorf("error binding env var DB_PASSWORD: %w", err)
-		}
-		if err := viper.BindEnv("database.dbname", "DB_NAME"); err != nil {
-			return nil, fmt.Errorf("error binding env var DB_NAME: %w", err)
-		}
 	}
 
 	return &config, nil

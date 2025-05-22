@@ -6,11 +6,11 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=postgres
+      - POSTGRES_DB=go-env-cli
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
-      - go_env_cli_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
 
 volumes:
-  go_env_cli_data:
+  postgres_data:

@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS env_variables (
 -- Insert default environments
 INSERT INTO environments (name, description)
 VALUES
+    ('local', 'Local development environment'),
     ('development', 'Development environment'),
     ('sit', 'System Integration Testing environment'),
     ('uat', 'User Acceptance Testing environment')
