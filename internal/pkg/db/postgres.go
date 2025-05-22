@@ -10,20 +10,12 @@ import (
 )
 
 type Config struct {
-	Host     string
-	Port     int
-	User     string
-	Password string
-	DBName   string
-	SSLMode  string
+	GO_CLI_DB string `mapstructure:"go_cli_db"`
 }
 
 // NewDB creates a new database connection
 func NewDB(config Config) (*sqlx.DB, error) {
-	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
-		config.Host, config.Port, config.User, config.Password, config.DBName, config.SSLMode)
-
-	db, err := sqlx.Connect("postgres", dsn)
+	db, err := sqlx.Connect("postgres", config.GO_CLI_DB)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}

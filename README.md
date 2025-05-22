@@ -24,35 +24,15 @@ Clone the repository and build the project:
 ```bash
 git clone https://github.com/yourusername/go-env-cli.git
 cd go-env-cli
-go build -o go-env-cli .
+docker compose up -d
+make init-db
+sudo make install
 ```
 
 ## Configuration
-
-Configuration can be provided via:
-
-1. Config file (`.go-env-cli.yaml` in the current directory or home)
-2. Environment variables (prefixed with `GO_ENV_CLI_`)
-3. Command line flags
-
-### Database Connection
-
 Set up the database connection via environment variables:
-
 ```
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=postgres
-DB_NAME=go_env_cli
-```
-
-## Initializing the Database
-
-Before first use, initialize the database:
-
-```bash
-go run cmd/go-env-cli/init_db.go
+echo 'export  GO_CLI_DB="postgres://postgres:postgres@localhost:5433/go-env-cli?sslmode=disable"' >> ~/.zshrc
 ```
 
 ## Usage
@@ -95,14 +75,6 @@ go-env-cli env list
 
 # Create a new environment
 go-env-cli env create --name staging --description "Staging environment"
-```
-
-### Using with Docker
-
-You can use the CLI with a Docker-based PostgreSQL for portability:
-
-```bash
-docker run -d --name postgres -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=go_env_cli -p 5432:5432 postgres:14
 ```
 
 ## License
