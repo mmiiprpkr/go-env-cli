@@ -19,7 +19,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
-	fmt.Printf("Connecting to PostgreSQL at %s...\n", cfg.GO_CLI_DB)
 	dbConn, err := db.NewDB(db.Config{GO_CLI_DB: cfg.GO_CLI_DB})
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)

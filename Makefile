@@ -23,13 +23,6 @@ clean:
 	@rm -rf $(BUILD_DIR)
 	@go clean
 
-test:
-	@go test ./...
-
-test-setup: docker-up
-	@echo "Setting up test database..."
-	@./scripts/setup_test_db.sh
-
 docker-up:
 	@echo "Starting PostgreSQL in Docker..."
 	@docker-compose up -d

@@ -72,7 +72,6 @@ func initHandler() (*handlers.EnvHandler, error) {
 	}
 
 	// Connect to database
-	fmt.Printf("Connecting to PostgreSQL at %s...\n", cfg.GO_CLI_DB)
 	dbConn, err := db.NewDB(db.Config{
 		GO_CLI_DB: cfg.GO_CLI_DB,
 	})
