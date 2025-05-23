@@ -12,11 +12,11 @@ type Config struct {
 }
 
 // LoadConfig loads configuration from file, environment variables or defaults
-func LoadConfig(_ string) (*Config, error) {
+func LoadConfig() (*Config, error) {
 	var config Config
 
 	viper.AutomaticEnv()
-	_ = viper.BindEnv("go_cli_db", "GO_CLI_DB")
+	viper.BindEnv("go_cli_db", "GO_CLI_DB")
 
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, fmt.Errorf("error unmarshalling config: %w", err)

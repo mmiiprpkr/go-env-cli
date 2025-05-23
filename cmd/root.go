@@ -3,6 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"runtime"
+	"syscall"
 
 	"go-env-cli/config"
 	"go-env-cli/internal/app/handlers"
@@ -13,10 +16,6 @@ import (
 )
 
 var (
-	// Global flags
-	configFile string
-	envFile    string
-
 	// Command specific flags
 	projectName     string
 	environmentName string
@@ -24,6 +23,8 @@ var (
 	keyValue        string
 	description     string
 	force           bool
+
+	runCommand string
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -45,10 +46,6 @@ func Execute() {
 }
 
 func init() {
-	// Global flags
-	rootCmd.PersistentFlags().StringVar(&configFile, "config", "", "config file (default is ./.go-env-cli.yaml)")
-	rootCmd.PersistentFlags().StringVar(&envFile, "env-file", "", "env file to load configuration from")
-
 	// Add commands
 	rootCmd.AddCommand(importCmd)
 	rootCmd.AddCommand(exportCmd)
@@ -66,7 +63,7 @@ func init() {
 // initHandler creates and initializes the environment handler
 func initHandler() (*handlers.EnvHandler, error) {
 	// Load configuration
-	cfg, err := config.LoadConfig(configFile)
+	cfg, err := config.LoadConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %v", err)
 	}
@@ -371,6 +368,13 @@ var deleteEnvCmd = &cobra.Command{
 var listEnvCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all environment variables for a project",
+	Long: `List all environment variables for a project.
+Use --run flag to execute a command with the environment variables loaded.
+
+Examples:
+  go-env-cli list --project test --env local
+  go-env-cli list --project test --env local --run "make run"
+  go-env-cli list --project test --env local --run "node server.js"`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Validate flags
 		if projectName == "" {
@@ -410,13 +414,77 @@ var listEnvCmd = &cobra.Command{
 			return
 		}
 
-		fmt.Printf("Environment variables for project '%s' (%s environment):\n",
+		if runCommand == "" {
+			fmt.Printf("Environment variables for project '%s' (%s environment):\n",
+				projectName, environmentName)
+			fmt.Println("=================================================")
+			for _, v := range variables {
+				fmt.Printf("%s=%s\n", v.Key, v.Value)
+			}
+			return
+		}
+
+		fmt.Printf("Running command with environment variables from project '%s' (%s environment):\n",
 			projectName, environmentName)
+		fmt.Printf("Command: %s\n", runCommand)
 		fmt.Println("=================================================")
-		for _, v := range variables {
-			fmt.Printf("%s=%s\n", v.Key, v.Value)
+
+		err = runCommandWithEnv(runCommand, variables)
+		if err != nil {
+			fmt.Printf("Error running command: %v\n", err)
+			os.Exit(1)
 		}
 	},
+}
+
+// runCommandWithEnv runs a command with the provided environment variables
+func runCommandWithEnv(command string, variables []models.EnvVariable) error {
+	if command == "" {
+		return fmt.Errorf("empty command")
+	}
+
+	// Prepare environment variables
+	env := os.Environ() // Get current environment
+
+	// Add our variables
+	for _, v := range variables {
+		env = append(env, fmt.Sprintf("%s=%s", v.Key, v.Value))
+	}
+
+	// Use shell to execute the command (รองรับ complex commands)
+	var cmd *exec.Cmd
+
+	// ตรวจสอบ OS เพื่อใช้ shell ที่เหมาะสม
+	if isWindows() {
+		cmd = exec.Command("cmd", "/C", command)
+	} else {
+		cmd = exec.Command("sh", "-c", command)
+	}
+
+	// Set environment
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+
+	// Run command
+	err := cmd.Run()
+	if err != nil {
+		// Check if it's an exit error
+		if exitError, ok := err.(*exec.ExitError); ok {
+			if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
+				os.Exit(status.ExitStatus())
+			}
+		}
+		return err
+	}
+
+	return nil
+}
+
+// Alternative implementation using exec.LookPath for better command resolution
+func isWindows() bool {
+	return runtime.GOOS == "windows"
 }
 
 // Soft delete project command
@@ -634,6 +702,7 @@ func init() {
 	// List env command flags
 	listEnvCmd.Flags().StringVar(&projectName, "project", "", "Project name (required)")
 	listEnvCmd.Flags().StringVar(&environmentName, "env", "development", "Environment name (default: development)")
+	listEnvCmd.Flags().StringVar(&runCommand, "run", "", "Command to run with environment variables loaded")
 	listEnvCmd.Flags().StringVar(&keyName, "filter", "", "Filter by key pattern")
 	listEnvCmd.MarkFlagRequired("project")
 
