@@ -3,8 +3,12 @@ package handlers
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
+	"os/user"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"go-env-cli/internal/app/models"
 )
@@ -39,6 +43,11 @@ func (h *EnvHandler) ImportEnvFile(filePath, projectName, environmentName string
 		if err != nil {
 			return fmt.Errorf("failed to create environment: %w", err)
 		}
+	}
+
+	// Create a backup of the .env file
+	if err := createEnvBackup(filePath, projectName); err != nil {
+		return fmt.Errorf("failed to create backup: %w", err)
 	}
 
 	// Open and parse .env file
@@ -296,4 +305,50 @@ func (h *EnvHandler) GetEnvironmentsForProject(projectName string) ([]models.Env
 	}
 
 	return environments, nil
+}
+
+// createEnvBackup creates a backup of the .env file in the user's home directory
+func createEnvBackup(sourcePath, projectName string) error {
+	// Get user's home directory
+	usr, err := user.Current()
+	if err != nil {
+		return fmt.Errorf("failed to get current user: %w", err)
+	}
+	homeDir := usr.HomeDir
+
+	// Create backup directory structure
+	backupBaseDir := filepath.Join(homeDir, ".go-env-cli", "backup")
+	projectBackupDir := filepath.Join(backupBaseDir, projectName)
+
+	// Create directories if they don't exist
+	if err := os.MkdirAll(projectBackupDir, 0755); err != nil {
+		return fmt.Errorf("failed to create backup directory: %w", err)
+	}
+
+	// Generate backup filename with timestamp
+	timestamp := time.Now().Format("2006-01-02-150405")
+	backupFileName := fmt.Sprintf("backup-%s.txt", timestamp)
+	backupFilePath := filepath.Join(projectBackupDir, backupFileName)
+
+	// Open source file
+	srcFile, err := os.Open(sourcePath)
+	if err != nil {
+		return fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer srcFile.Close()
+
+	// Create destination file
+	dstFile, err := os.Create(backupFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to create backup file: %w", err)
+	}
+	defer dstFile.Close()
+
+	// Copy contents
+	_, err = io.Copy(dstFile, srcFile)
+	if err != nil {
+		return fmt.Errorf("failed to copy file contents: %w", err)
+	}
+
+	return nil
 }
